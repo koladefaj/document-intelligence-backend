@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     app_name: str = Field(default="document-intelligence-backend")
 
     database_url: str
+    database_sync_url: str
+    database_username: str
+    database_password: str
     redis_url: str
 
     secret_key: str
