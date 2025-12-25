@@ -1,11 +1,14 @@
 import uuid
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, APIRouter
 from app.infrastructure.logging import setup_logging
+from app.api.v1.router import router as v1_router
 
 setup_logging()
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Document Intelligence Backend")
+
+app.include_router(v1_router, prefix="/api/v1")
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
