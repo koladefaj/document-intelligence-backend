@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
+
+from fastapi import Depends
 from jose import jwt
 from app.infrastructure.config import settings
-
-ALGORITHM = "HS256"
 
 def create_access_token(user: str):
     expire = datetime.utcnow() + timedelta(
@@ -10,7 +10,7 @@ def create_access_token(user: str):
     )
 
     payload = {"sub": str(user.id), "email": user.email, "exp": expire}
-    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 def create_refresh_token(user: str):
     expire = datetime.utcnow() + timedelta(
@@ -19,4 +19,5 @@ def create_refresh_token(user: str):
 
     payload = {"sub": str(user.id), "type": "refresh", "exp": expire}
 
-    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+

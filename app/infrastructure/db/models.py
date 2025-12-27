@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean
+from sqlalchemy import String, Boolean, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 import uuid
 
@@ -35,3 +35,15 @@ class User(Base):
         Boolean,
         default=True
     )
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+        )
+    file_name: Mapped[str]
+    content: Mapped[str]
+    url: Mapped[str]
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))

@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     database_password: str
     redis_url: str
 
+    minio_endpoint: str
+    minio_access_key: str
+    minio_secret_key: str
+    minio_bucket: str
+    minio_secure: bool = False
+
+    jwt_algorithm: str = "HS256"
     secret_key: str
     access_token_expire_minutes: int = 20
     refresh_token_expire_days: int = 7

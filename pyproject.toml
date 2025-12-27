@@ -17,6 +17,9 @@ alembic = "^1.17.2"
 psycopg2 = "^2.9.11"
 python-jose = "^3.5.0"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.21"
+minio = "^7.2.20"
+boto3 = "^1.42.16"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1"

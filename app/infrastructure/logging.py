@@ -1,16 +1,22 @@
 import logging
-import sys
-from pythonjsonlogger import jsonlogger
+from contextvars import ContextVar
+
+# Request ID lives here during request lifecycle
+request_id_var = ContextVar("request_id", default=None)
+
+class RequestIdFilter(logging.Filter):
+    def filter(self, record):
+        record.request_id = request_id_var.get()
+        return True
 
 def setup_logging():
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-
-    handler = logging.StreamHandler(sys.stdout)
-
-    formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s - %(levelname)s - %(name)s - %(message)s - %(request_id)s"
+    logging.basicConfig(
+        level=logging.INFO,
+        format='{"asctime": "%(asctime)s", "levelname": "%(levelname)s", '
+               '"name": "%(name)s", "message": "%(message)s", '
+               '"request_id": "%(request_id)s"}'
     )
 
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    # Apply the filter so request_id isn't null
+    for handler in logging.root.handlers:
+        handler.addFilter(RequestIdFilter())
