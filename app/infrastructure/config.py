@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_password: str
     redis_url: str
 
+    celery_broker_url: str
+    celery_result_backend: str
+
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: str

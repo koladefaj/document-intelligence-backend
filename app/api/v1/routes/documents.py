@@ -6,6 +6,7 @@ from app.infrastructure.db.session import get_session
 from app.infrastructure.storage.s3 import upload_file
 from app.infrastructure.auth.dependencies import get_current_user
 from app.infrastructure.db.models import Document
+from app.workers.document_worker import process_document_task
 
 
 router = APIRouter(
@@ -13,7 +14,7 @@ router = APIRouter(
     tags=["documents"],
 )
 
-@router.post("/", status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
+@router.post("/upload_document", status_code=status.HTTP_201_CREATED)
 async def upload_document(
         file: UploadFile = File(...),
         session: AsyncSession = Depends(get_session),
@@ -36,15 +37,23 @@ async def upload_document(
         session.add(doc)
         await session.commit()
 
+        task = process_document_task.delay(str(doc.id))
+
+
         return {
             "message": "Upload Successful",
             "document_id": str(doc.id),
             "file_name": file.filename,
+            "task_id": task.id,
+            "status": "PROCESSING",
             "url": url
         }
 
+
     except Exception as e:
+        await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"SERVER ERROR: {type(e).__name__}: {e}"
         )
+

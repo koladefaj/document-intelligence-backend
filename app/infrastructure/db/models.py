@@ -43,7 +43,7 @@ class Document(Base):
         primary_key=True,
         default=uuid.uuid4,
         )
-    file_name: Mapped[str]
-    content: Mapped[str]
-    url: Mapped[str]
+    file_name: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
