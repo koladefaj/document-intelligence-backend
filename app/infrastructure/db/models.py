@@ -51,5 +51,5 @@ class Document(Base):
     local_path: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, default="PENDING")
 
-    raw_text: Mapped[str] = mapped_column(Text, nullable=True)
-    analysis: Mapped[str] = mapped_column(Text, nullable=True)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=True, default="")
+    analysis: Mapped[str] = mapped_column(Text, nullable=True, default="")

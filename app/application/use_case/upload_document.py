@@ -3,6 +3,7 @@ from fastapi import Depends
 from app.infrastructure.db.models import Document
 from app.domain.services.storage_interface import StorageInterface
 from app.dependencies import get_storage_service
+from app.infrastructure.auth.dependencies import get_current_user
 
 
 
@@ -22,7 +23,11 @@ async def handle_upload(file, session, user, storage: StorageInterface = Depends
         file_bytes = f.read()
 
 
-    url = storage.upload(file_id, file.filename, file_bytes, file.content_type)
+    url = await storage.upload(file_id=file_id, file_name = file.filename, file_bytes=file_bytes, content_type=file.content_type)
+
+
+    print("this is the obj",user)
+    print("the id", user.id)
 
     # Save metadata in database
     doc = Document(
@@ -32,7 +37,9 @@ async def handle_upload(file, session, user, storage: StorageInterface = Depends
         local_path = local_path,
         owner_id=user.id,
         status="PENDING"
+
     )
     session.add(doc)
     await session.commit()
+    print(doc, url, local_path)
     return doc, url, local_path

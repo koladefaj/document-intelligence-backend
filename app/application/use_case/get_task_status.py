@@ -1,9 +1,8 @@
 from app.infrastructure.queue.celery_app import celery_app
 from celery.result import AsyncResult
-from fastapi import Depends
-from app.dependencies import get_task_queue
 
-def get_task_status(task_id: str, queue = Depends(get_task_queue)):
+
+def get_task_status(task_id: str, queue):
     result = AsyncResult(task_id, app=queue)
 
     return {

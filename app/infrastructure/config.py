@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     redis_url: str
     redis_port: int
 
+    gemini_api: str
+
     celery_broker_url: str
     celery_result_backend: str
 

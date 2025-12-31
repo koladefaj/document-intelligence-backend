@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 from app.infrastructure.db.session import get_session
 from app.infrastructure.auth.dependencies import get_current_user
-from app.application.use_case import upload_document, process_document
+from app.application.use_case.upload_document import handle_upload
+from app.application.use_case.process_document import queue_processing
 from app.domain.services.storage_interface import StorageInterface
 from app.dependencies import get_storage_service
 
@@ -20,17 +21,23 @@ async def upload_document(
         user = Depends(get_current_user),
         storage: StorageInterface = Depends(get_storage_service)
 ):
-    try:
-        doc, url, local_path = await upload_document.handle_upload(file, session, user, storage)
+    
 
-        task = process_document.queue_processing(doc.id)
+
+
+    try:
+        doc, url, local_path = await handle_upload(file, session, user, storage)
+
+        task = queue_processing(str(doc.id))
 
         return {
             "message": "Upload Successful",
             "document_id": str(doc.id),
             "task_id": task.id,
+            "local_path": local_path,
             "status": "PROCESSING",
-            "url": url
+            "url": url,
+            "owner": user.email
         }
 
 

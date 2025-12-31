@@ -13,7 +13,7 @@ class MinioStorage(StorageInterface):
         )
         self.bucket = settings.minio_bucket
 
-    async def upload_file(self, file_id: str, file_name: str, file_bytes: bytes, content_type: str) -> str:
+    async def upload(self, file_id: str, file_name: str, file_bytes: bytes, content_type: str) -> str:
         """ Upload a file """
         self.ensure_bucket_exists(self.bucket)
 

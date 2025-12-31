@@ -6,7 +6,7 @@ LOCAL_UPLOAD_DIR = "app/files"
 os.makedirs(LOCAL_UPLOAD_DIR, exist_ok=True)
 
 class LocalStorage(StorageInterface):
-    def upload(self, file_id: str, file_bytes: bytes, content_type: str) -> str:
+    async def upload(self, file_id: str, file_name:str, file_bytes: bytes, content_type: str) -> str:
         file_path = os.path.join(LOCAL_UPLOAD_DIR, file_id)
         with open(file_path, "wb") as f:
             f.write(file_bytes)
