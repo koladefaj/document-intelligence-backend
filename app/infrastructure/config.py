@@ -1,71 +1,73 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+import os
 import logging
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
 
-# Get a logger for config-specific warnings
 logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
-    """
-    Centralized configuration management.
-    Values are loaded in the following priority:
-    1. Initializer arguments (highest)
-    2. Environment variables
-    3. .env file
-    4. Default values (lowest)
-    """
-
     # --- 1. APP BASICS ---
-    app_env: str = Field(default="local") # 'local', 'development', 'production'
+    app_env: str = Field(default="local")
     app_name: str = Field(default="document-intelligence-backend")
 
-    # --- 2. DATABASE (Postgres) ---
-    # Dev Note: In Docker, database_url should point to 'db:5432'
-    database_url: str        # Async URL (e.g., postgresql+asyncpg://...)
-    database_sync_url: str   # Sync URL for Celery (e.g., postgresql://...)
-    database_username: str
-    database_password: str
-    db_port: int = 5432
-
-    # --- 3. CACHE & BROKER (Redis) ---
-    # Dev Note: Used for both Celery tasks and WebSocket Pub/Sub
-    redis_url: str           # e.g., redis://redis:6379/0
-    redis_port: int = 6379
-
-    # --- 4. AI PROVIDERS ---
-    gemini_api: str          # Google AI API Key
-    ai_provider: str = "gemini" # Can be 'gemini' or 'ollama'
-
-    # --- 5. TASK QUEUE (Celery) ---
+    # --- 2. DATABASE & REDIS ---
+    # These are base strings from .env (usually containing 'localhost')
+    database_url: str
+    database_sync_url: str
+    db_port: int
+    redis_url: str
+    redis_port: int
     celery_broker_url: str
     celery_result_backend: str
-
-    # --- 6. FILE STORAGE (MinIO / S3) ---
-    # Dev Note: If USE_MINIO=true, these must be valid and reachable
     minio_endpoint: str
+    minio_bucket: str
     minio_access_key: str
     minio_secret_key: str
-    minio_bucket: str
-    minio_secure: bool = False
-    minio_api_port: int = 9000
-    minio_console_port: int = 9001
+    minio_api_port: int
+    minio_console_port: int
+    minio_secure: bool
+    storage_type: str
 
-    # --- 7. SECURITY & JWT ---
-    jwt_algorithm: str = "HS256"
-    secret_key: str          # Critical: Must be a long, random string in production
-    access_token_expire_minutes: int = 20
-    refresh_token_expire_days: int = 7
+    
+    # --- 3. AI & SECURITY ---
+    gemini_api: str
+    ai_provider: str 
+    ollama_model: str
+    secret_key: str
+    access_token_expire_minutes: int
+    refresh_token_expire_days: int
+    jwt_algorithm: str
+    
+    # --- AUTOMATIC HOST RESOLUTION ---
+    # This logic runs immediately when Settings() is initialized
+    def __init__(self, **values):
+        super().__init__(**values)
+        
+        # Check if we are running inside a Docker container
+        # Docker automatically creates a '.dockerenv' file at the root
+        is_docker = os.path.exists('/.dockerenv')
+        
+        if is_docker:
+            logger.info("Docker environment detected. Routing traffic to service names.")
+            # Replace 'localhost' and '127.0.0.1' with Docker service names
+            self.database_url = self.database_url.replace("localhost", "db").replace("127.0.0.1", "db")
+            self.database_sync_url = self.database_sync_url.replace("localhost", "db").replace("127.0.0.1", "db")
+            self.redis_url = self.redis_url.replace("localhost", "redis").replace("127.0.0.1", "redis")
+            self.celery_broker_url = self.celery_broker_url.replace("localhost", "redis").replace("127.0.0.1", "redis")
+            self.celery_result_backend = self.celery_result_backend.replace("localhost", "redis").replace("127.0.0.1", "redis")
+            self.minio_endpoint = self.minio_endpoint.replace("localhost", "minio").replace("127.0.0.1", "minio")
 
-    # --- 8. PYDANTIC CONFIGURATION ---
+    # Clean the API Key in case it has quotes from the .env file
+    @field_validator("gemini_api", mode="after")
+    @classmethod
+    def clean_api_key(cls, v: str) -> str:
+        return v.strip().strip('"').strip("'")
+
     model_config = SettingsConfigDict(
-        # Look for a file named .env in the root project directory
         env_file=".env",
         env_file_encoding="utf-8",
-        # 'allow' lets us pass extra vars that aren't defined above (useful for legacy logs)
         extra="allow",
-        # Case insensitive means 'DATABASE_URL' in .env maps to 'database_url' in Python
         case_sensitive=False 
     )
 
-# Singleton instance used by the rest of the application
 settings = Settings()

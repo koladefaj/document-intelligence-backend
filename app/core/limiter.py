@@ -1,10 +1,14 @@
 import logging
+import os
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.infrastructure.config import settings
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+storage_uri = settings.redis_url if os.getenv("ENV") != "testing" else "memory://"
+IS_TESTING = os.getenv("ENV") == "testing"
 
 # --- RATE LIMITER CONFIGURATION ---
 # key_func=get_remote_address: Identifies users by their IP address.
@@ -15,8 +19,9 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(
     key_func=get_remote_address,
     # This points to your Redis instance so limits are shared across all Docker containers
-    storage_uri=f"{settings.redis_url}",
+    storage_uri=f"{storage_uri}",
     strategy="fixed-window", # Common strategies: 'fixed-window', 'moving-window'
+    enabled=not IS_TESTING
 )
 
 def init_limiter_error_handlers(app):

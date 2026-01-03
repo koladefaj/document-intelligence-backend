@@ -1,7 +1,7 @@
 """
 Domain-specific exceptions for the Document Intelligence system.
 
-Dev Note: These are 'Base Exceptions'. They are caught by FastAPI 
+These are 'Base Exceptions'. They are caught by FastAPI 
 exception handlers to return consistent HTTP status codes to the frontend.
 """
 

@@ -13,6 +13,7 @@ celery_app = Celery(
     "document_tasks",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
+    include=["app.workers.document_worker"]
 )
 
 # --- ADVANCED CONFIGURATION ---

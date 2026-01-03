@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from app.infrastructure.auth.dependencies import get_current_user
 from app.application.use_case.get_task_status import get_task_status
 
 # Initialize logger for task tracking
@@ -11,7 +12,7 @@ router = APIRouter(
 )
 
 @router.get("/{task_id}")
-async def check_task_status(task_id: str):
+async def check_task_status(task_id: str, user = Depends(get_current_user)):
     """
     Fetches the current state of a background job from the Redis backend.
     

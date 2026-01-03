@@ -2,7 +2,6 @@ import logging
 from fastapi import Depends, HTTPException, APIRouter, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-
 from app.api.v1.schemas import RegisterRequest, LoginRequest
 from app.infrastructure.db.session import get_session
 from app.application.use_case.auth import register_user as register_uc, login as login_uc

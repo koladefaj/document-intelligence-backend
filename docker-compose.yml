@@ -4,8 +4,8 @@ services:
   backend:
     build: .
     container_name: document_backend
-    # Use --reload only in development
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Use --reload only in development to see code changes instantly
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     env_file:
@@ -20,6 +20,15 @@ services:
     volumes:
       - .:/app
       - uploaded_files:/app/app/files
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # Keeps the backend from eating too much RAM
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: postgres:18-alpine
@@ -38,6 +47,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:latest
@@ -65,32 +79,53 @@ services:
       - ollama_storage:/root/.ollama
     ports:
       - "11434:11434"
-    # Added qwen2.5-vl for vision capabilities
-    entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull qwen2.5-vl:7b && wait"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+    # Using 'moondream' (1.7GB) instead of Qwen 7B (4.5GB) for your 8GB RAM
+    entrypoint: >
+      /bin/sh -c "
+      ollama serve & 
+      sleep 15;
+      until ollama pull moondream; do
+      echo 'Download failed or timed out, retrying in 5 seconds...';
+      sleep 5;
+      done;
+      wait"
+    deploy:
+      resources:
+        limits:
+          memory: 2.5G # Caps Ollama so your laptop stays responsive
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   worker:
     build: .
     container_name: celery_worker
-    # Ensure the path to worker_file matches your app structure
     command: celery -A app.infrastructure.queue.celery_app worker --loglevel=info -P solo
     env_file: .env
     environment:
       - OLLAMA_HOST=http://ollama:11434
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD:-root}@db:5432/${POSTGRES_DB:-document_backend}
-      - REDIS_URL=redis://redis:6379/0
+      # Note: Our config.py handles the localhost -> db swap
     depends_on:
       db:
         condition: service_healthy
       ollama:
-        condition: service_healthy
+        condition: service_started
+      redis:
+        condition: service_started
     volumes:
       - .:/app
       - uploaded_files:/app/app/files
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:

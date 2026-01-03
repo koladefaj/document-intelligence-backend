@@ -66,11 +66,5 @@ async def upload_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Upload could not be completed. Error: {type(e).__name__}"
         )
+    
 
-@router.get("/status/{task_id}")
-async def check_analysis_status(task_id: str, user = Depends(get_current_user)):
-    """
-    Polling endpoint: Allows frontend to check AI progress using the task_id.
-    """
-    status_report = get_task_status(task_id)
-    return status_report

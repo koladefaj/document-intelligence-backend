@@ -4,10 +4,11 @@ import pandas as pd
 import ollama
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_message
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from google import genai
 from docx import Document as DocxReader
 from app.infrastructure.config import settings
+from app.domain.exceptions import ProcessingError
 from app.domain.services.document_processor import DocumentProcessorInterface
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class DocumentProcessor(DocumentProcessorInterface):
         
         # New 2025/2026 GenAI Client
         self.gemini_client = genai.Client(api_key=self.api_key)
-        self.ollama_model = "qwen2.5-vl:3b"
+        self.ollama_model = settings.ollama_model
 
     def _extract_text_metadata(self, file_path: str) -> str:
         """Fallback text extraction for metadata and word counts."""
@@ -79,6 +80,8 @@ class DocumentProcessor(DocumentProcessorInterface):
                 logger.warning("Gemini Rate Limit (429) hit. Tenacity is retrying...")
                 raise Exception("Gemini Rate Limit reached.")
             raise Exception(f"Gemini Cloud Error: {str(e)}")
+        
+
 
     async def _get_ollama_summary(self, file_path: str) -> str:
         """Local fallback using Ollama for privacy-sensitive or offline tasks."""
@@ -99,7 +102,7 @@ class DocumentProcessor(DocumentProcessorInterface):
             return response['message']['content']
         except Exception as e:
             logger.error(f"Local VLM Error: {e}")
-            return f"Local VLM Error: {str(e)}"
+            raise ProcessingError(f"AI Engine failed to respond: {str(e)}")
 
     async def process(self, file_path: str, mime_type: str = None) -> dict:
         """Main entry point for document analysis."""

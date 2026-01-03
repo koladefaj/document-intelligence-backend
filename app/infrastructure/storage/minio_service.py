@@ -32,6 +32,7 @@ class MinioStorage(StorageInterface):
         Dev Note: We use 'file_id' as the Object Name in MinIO to ensure 
         consistency with the database and avoid issues with special characters in filenames.
         """
+        is_secure = settings.minio_secure
         try:
             self.ensure_bucket_exists(self.bucket)
             
@@ -48,7 +49,9 @@ class MinioStorage(StorageInterface):
             )
             
             logger.info(f"MinIO: Successfully uploaded {file_id} ({file_name})")
-            return f"https://{settings.minio_endpoint}/{self.bucket}/{file_id}"
+
+            protocol = "https" if is_secure else "http"
+            return f"{protocol}://{settings.minio_endpoint}/{self.bucket}/{file_id}"
             
         except Exception as e:
             logger.error(f"MinIO Upload Error: {str(e)}")

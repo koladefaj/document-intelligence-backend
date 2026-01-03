@@ -103,7 +103,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         logger.error(f"Unexpected WebSocket error for task {task_id}: {str(e)}")
         manager.disconnect(task_id)
 
-@app.get("/", status_code=200)
+@app.get("/healthy", status_code=200)
 def health_check(request: Request):
     """Standard health check for Docker/Kubernetes liveness probes."""
     return {

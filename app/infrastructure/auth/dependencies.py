@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,9 +26,8 @@ async def get_current_user(
     Workflow:
     1. Extracts credentials from the Bearer token.
     2. Decodes and validates the JWT using the SECRET_KEY.
-    3. Lookups the user in the database to ensure they still exist and are active.
-    
-    Dev Note: In Docker production, ensure SECRET_KEY is never the default 'secret'.
+    3. Converts the string ID to a UUID object for SQLAlchemy compatibility.
+    4. Lookups the user in the database to ensure they still exist and are active.
     """
     try:
         # Decode the token
@@ -38,9 +38,9 @@ async def get_current_user(
         )
         
         # 'sub' (subject) is the standard JWT claim for the user identifier
-        user_id: str = payload.get("sub")
+        user_id_str: str = payload.get("sub")
 
-        if not user_id:
+        if not user_id_str:
             logger.warning("Auth Failure: Token missing 'sub' claim.")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -52,23 +52,34 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Token is invalid or has expired"
-        )
+    )
 
     # --- DATABASE VERIFICATION ---
-    # Dev Note: We query the DB for every authenticated request to ensure
-    # we can handle 'banned' or 'deleted' users instantly.
-    result = await session.execute(select(User).where(User.id == user_id))
+    
+    # FIX: Convert the string user_id into a proper UUID object.
+    # SQLAlchemy's Uuid type on SQLite expects a UUID object, not a string.
+    try:
+        user_uuid = uuid.UUID(user_id_str)
+    except (ValueError, AttributeError):
+        logger.warning(f"Auth Failure: Malformed UUID in token sub: {user_id_str}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user identifier format"
+        )
+
+    # Query the database using the converted UUID object
+    result = await session.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
 
     if not user:
-        logger.warning(f"Auth Failure: User {user_id} not found in database.")
+        logger.warning(f"Auth Failure: User {user_id_str} not found in database.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="User not found"
         )
     
     if not user.is_active:
-        logger.warning(f"Auth Failure: User {user_id} is inactive.")
+        logger.warning(f"Auth Failure: User {user_id_str} is inactive.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="User account is disabled"
