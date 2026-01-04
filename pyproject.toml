@@ -43,6 +43,8 @@ pypdf = "^6.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1"
+pytest-asyncio = "^0.23.0"
+anyio = "^4.0.0"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
