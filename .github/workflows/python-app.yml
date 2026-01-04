@@ -1,4 +1,4 @@
-name: Python application
+name: Python CI/CD Pipeline
 
 on:
   push:
@@ -7,10 +7,24 @@ on:
     branches: [ "main" ]
 
 jobs:
-  test:
+  # 1. LINT JOB: Checks for PEP8 and code quality
+  lint:
     runs-on: ubuntu-latest
-    
-    # This spins up real DBs in the cloud for your tests!
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Ruff (Fast PEP8 Linter)
+        run: pip install ruff
+      - name: Lint with ruff
+        run: ruff check . # This will fail if your code is "messy"
+
+  # 2. TEST JOB: Runs your 10 pytest cases
+  test:
+    needs: lint  # Only runs if Lint passes
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:15-alpine
@@ -26,50 +40,72 @@ jobs:
           - 6379:6379
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install dependencies
+        run: poetry install
+      - name: Run Pytest
+        env:
+          ENV: testing
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          GEMINI_API: ${{ secrets.GEMINI_API }}
+          DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/test_db
+          DATABASE_SYNC_URL: postgresql://user:password@localhost:5432/test_db
+          DB_PORT: 5432
+          REDIS_URL: redis://localhost:6379/0
+          REDIS_PORT: 6379
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/0
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_BUCKET: test-bucket
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_API_PORT: 9000
+          MINIO_CONSOLE_PORT: 9001
+          MINIO_SECURE: "False"
+          OLLAMA_MODEL: "moondream:latest"
+          ACCESS_TOKEN_EXPIRE_MINUTES: 15
+          REFRESH_TOKEN_EXPIRE_DAYS: 7
+          JWT_ALGORITHM: "HS256"
+          AI_PROVIDER: "mock"
+          STORAGE_TYPE: "local"
+        run: poetry run pytest
 
-    - name: Install Poetry
-      run: |
-        curl -sSL https://install.python-poetry.org | python3 -
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+  # 3. BUILD JOB: Creates the Docker image and pushes to Docker Hub
+  build-and-push:
+    needs: test  # Only runs if Tests pass
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/doc-intel-backend:latest
 
-    - name: Install dependencies
-      run: poetry install
-
-    - name: Run Pytest
-      env:
-        ENV: testing
-        SECRET_KEY: ${{ secrets.SECRET_KEY }}
-        GEMINI_API: ${{ secrets.GEMINI_API }}
-        
-        # Database & Redis (Required by Pydantic)
-        DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/test_db
-        DATABASE_SYNC_URL: postgresql://user:password@localhost:5432/test_db
-        DB_PORT: 5432
-        REDIS_URL: redis://localhost:6379/0
-        REDIS_PORT: 6379
-        CELERY_BROKER_URL: redis://localhost:6379/0
-        CELERY_RESULT_BACKEND: redis://localhost:6379/0
-
-        # Minio (Required by Pydantic even if not used in tests)
-        MINIO_ENDPOINT: localhost:9000
-        MINIO_BUCKET: test-bucket
-        MINIO_ACCESS_KEY: minioadmin
-        MINIO_SECRET_KEY: minioadmin
-        MINIO_API_PORT: 9000
-        MINIO_CONSOLE_PORT: 9001
-        MINIO_SECURE: "False"
-
-        # AI & JWT (Required by Pydantic)
-        OLLAMA_MODEL: "moondream:latest"
-        ACCESS_TOKEN_EXPIRE_MINUTES: 15
-        REFRESH_TOKEN_EXPIRE_DAYS: 7
-        JWT_ALGORITHM: "HS256"
-        AI_PROVIDER: "mock"
-        STORAGE_TYPE: "local"
-      run: poetry run pytest
+  # 4. DEPLOY JOB: Tells your server to pull the new image
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy to Railway
+        run: railway up --detach --service 2dc14cfe-eae3-4516-bd22-187603657da4
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
