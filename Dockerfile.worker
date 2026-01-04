@@ -4,15 +4,15 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/root/.local/bin:$PATH"
-# Fixes the 'Read operation timed out' error
 ENV POETRY_HTTP_TIMEOUT=300
 
-# 2. Install minimal system dependencies
+# 2. Install dependencies + OLLAMA
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
     libmagic1 \
     poppler-utils \
+    && curl -fsSL https://ollama.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Install Poetry
@@ -22,15 +22,12 @@ WORKDIR /app
 
 # 4. Install Python dependencies
 COPY pyproject.toml poetry.lock* ./
-
-# Optimization: Increase workers and disable keyring for headless Docker builds
 RUN poetry config virtualenvs.create false \
-    && poetry config installer.max-workers 10 \
-    && poetry config keyring.enabled false \
     && poetry install --no-root --no-interaction --no-ansi
 
 # 5. Copy application code
 COPY . .
 
-# 6. Default command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 6. The "Magic" Command
+# Starts Ollama, waits 5 seconds, pulls a tiny model, then starts your app
+CMD sh -c "ollama serve & sleep 5 && ollama pull tinyllama && uvicorn app.main:app --host 0.0.0.0 --port 8000"
