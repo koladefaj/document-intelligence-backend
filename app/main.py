@@ -1,4 +1,5 @@
 import uuid
+import os
 import logging
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,8 @@ from slowapi.errors import RateLimitExceeded
 # Initialize centralized logging configuration
 setup_logging()
 logger = logging.getLogger(__name__)
+
+allowed = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
 app = FastAPI(
     title="Document Intelligence Backend",
@@ -32,7 +35,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # In Docker/Production, ensure 'backend' or your domain is in this list.
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "backend", "*.production-app.com"]
+    allowed_hosts=allowed
 )
 
 # CORS Configuration
@@ -40,7 +43,8 @@ app.add_middleware(
 # ensure the frontend's container name or URL is added here.
 origins = [
     "http://localhost:8000",
-    "https://production-app.com",
+    "http://localhost:3000", # Common React port
+    "https://your-frontend.up.railway.app",
 ]
 
 app.add_middleware(
