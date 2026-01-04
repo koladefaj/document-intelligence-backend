@@ -2,6 +2,7 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from app.infrastructure.config import settings
+from contextlib import contextmanager
 
 # Initialize logger for database connection events
 logger = logging.getLogger(__name__)
@@ -43,7 +44,6 @@ def get_db_sync() -> Session:
     return SessionLocal()
 
 # --- 3. CONTEXT MANAGER (Preferred for clean code) ---
-from contextlib import contextmanager
 
 @contextmanager
 def db_session_scope():

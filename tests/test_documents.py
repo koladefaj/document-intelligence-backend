@@ -2,7 +2,6 @@ import pytest
 from httpx import AsyncClient
 from starlette import status
 from unittest.mock import patch
-import io
 
 @pytest.mark.asyncio
 async def test_upload_document_success(client: AsyncClient):

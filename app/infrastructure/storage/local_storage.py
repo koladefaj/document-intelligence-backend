@@ -1,4 +1,3 @@
-import os
 import logging
 from pathlib import Path
 from app.domain.services.storage_interface import StorageInterface

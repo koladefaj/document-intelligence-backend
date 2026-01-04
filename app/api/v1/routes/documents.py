@@ -7,7 +7,6 @@ from app.infrastructure.db.session import get_session
 from app.infrastructure.auth.dependencies import get_current_user
 from app.application.use_case.upload_document import handle_upload
 from app.application.use_case.process_document import queue_processing
-from app.application.use_case.get_task_status import get_task_status
 from app.domain.services.storage_interface import StorageInterface
 from app.dependencies import get_storage_service
 from app.core.security import validate_file_content

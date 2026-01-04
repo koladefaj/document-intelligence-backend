@@ -42,7 +42,7 @@ async def validate_file_content(file: UploadFile):
         logger.warning(f"Security: Blocked oversized file ({file_size} bytes)")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File exceeds 10MB limit."
+            detail="File exceeds 10MB limit."
         )
 
     # --- STAGE 2: CONTENT VALIDATION (Magic Bytes) ---
