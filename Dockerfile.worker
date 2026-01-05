@@ -30,4 +30,4 @@ COPY . .
 
 # 6. The "Magic" Command
 # Starts Ollama, waits 5 seconds, pulls a tiny model, then starts your app
-CMD sh -c "ollama serve & sleep 5 && ollama pull tinyllama && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+CMD sh -c "ollama serve & sleep 5 && ollama pull qwen2.5:7b && uvicorn app.main:app --host 0.0.0.0 --port 8000"
