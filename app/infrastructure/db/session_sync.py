@@ -2,7 +2,6 @@ import logging
 from app.infrastructure.db.session import db_url
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from app.infrastructure.config import settings
 from contextlib import contextmanager
 
 # Initialize logger for database connection events
