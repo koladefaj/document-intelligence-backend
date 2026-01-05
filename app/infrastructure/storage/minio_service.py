@@ -2,7 +2,6 @@ import os
 import logging
 from minio import Minio
 from io import BytesIO
-from app.infrastructure.config import settings
 from app.domain.services.storage_interface import StorageInterface
 
 # Initialize logger
@@ -16,8 +15,10 @@ class MinioStorage(StorageInterface):
     def __init__(self):
         # IMPORTANT: MinIO SDK expects 'host:port', not 'http://host:port'
         # We strip any protocol prefixes just in case they exist in settings
+
+        raw_endpoint = os.getenv("MINIO_ENDPOINT") or ""
         clean_endpoint = (
-            settings.minio_endpoint
+            raw_endpoint
             .replace("https://", "")
             .replace("http://", "")
             .strip("/")
@@ -28,12 +29,12 @@ class MinioStorage(StorageInterface):
         try:
             self.client = Minio(
                 clean_endpoint,
-                access_key=settings.minio_access_key,
-                secret_key=settings.minio_secret_key,
+                access_key=os.getenv("MINIO_ACCESS_KEY"),
+                secret_key=os.getenv("MINIO_SECRET_KEY"),
                 # secure=True if using port 443/SSL, False for Railway private 9000
-                secure=settings.minio_secure 
+                secure=os.getenv("MINIO_SECURE")
             )
-            self.bucket = settings.minio_bucket
+            self.bucket = os.getenv("MINIO_BUCKET")
         except Exception as e:
             logger.error(f"MinIO: Failed to initialize client: {str(e)}")
             raise
@@ -56,8 +57,8 @@ class MinioStorage(StorageInterface):
             logger.info(f"MinIO: Successfully uploaded {file_id} ({file_name})")
 
             # Return a formatted URL for reference
-            protocol = "https" if settings.minio_secure else "http"
-            return f"{protocol}://{settings.minio_endpoint}/{self.bucket}/{file_id}"
+            protocol = "https" if os.getenv("MINIO_SECURE") else "http"
+            return f"{protocol}://{os.getenv("MINIO_ENDPOINT")}/{self.bucket}/{file_id}"
             
         except Exception as e:
             logger.error(f"MinIO Upload Error: {str(e)}")
