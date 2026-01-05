@@ -1,4 +1,5 @@
 import logging
+import os
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -9,11 +10,16 @@ from app.infrastructure.config import settings
 # Initialize logger for async database events
 logger = logging.getLogger(__name__)
 
+
 # --- 1. ASYNC ENGINE CONFIGURATION ---
 # Dev Note: This uses 'database_url' (which should start with postgresql+asyncpg://)
 # echo=True is helpful in development to see the SQL being generated in your Docker logs.
+
+db_url = os.getenv("DATABASE_URL")
+aysnc_db = db_url.replace('postgresql://', 'postgresql+asyncpg://')
+
 engine = create_async_engine(
-    settings.database_url,
+    aysnc_db,
     echo=False,  # Set to True for SQL debugging
     pool_pre_ping=True,  # Vital for Docker container stability
 )

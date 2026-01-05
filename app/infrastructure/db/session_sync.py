@@ -1,4 +1,5 @@
 import logging
+from app.infrastructure.db.session import db_url
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from app.infrastructure.config import settings
@@ -11,8 +12,9 @@ logger = logging.getLogger(__name__)
 # Dev Note: We use the 'database_sync_url' (psycopg2) here, NOT the asyncpg one.
 # 'pool_pre_ping=True' checks if the connection is alive before using it,
 # which is vital in Docker if the Postgres container restarts.
+
 engine = create_engine(
-    settings.database_sync_url, 
+    db_url, 
     echo=False,  # Set to True only for heavy SQL debugging
     pool_pre_ping=True,
     pool_size=10,
