@@ -20,7 +20,7 @@ def get_storage_service() -> StorageInterface:
         return _storage_instance
 
     # Determine which storage to use
-    # Default to 'r2' if you are no longer using Minio
+    # Default to 'r2' if you are no longer using Minio Storage
     storage_type = os.getenv("STORAGE_TYPE", "r2").lower()
 
     if storage_type == "minio":
