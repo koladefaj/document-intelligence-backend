@@ -1,7 +1,7 @@
 import os
 import logging
 import pandas as pd
-import ollama
+from ollama import AsyncClient
 import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_message
 from pypdf import PdfReader
@@ -22,6 +22,7 @@ class DocumentProcessor(DocumentProcessorInterface):
         # New 2025/2026 GenAI Client
         self.gemini_client = genai.Client(api_key=self.api_key)
         self.ollama_model = settings.ollama_model
+        self.ollama_client = AsyncClient(host=settings.ollama_base_url)
 
     def _extract_text_metadata(self, file_path: str) -> str:
         """Fallback text extraction for metadata and word counts."""
@@ -86,23 +87,19 @@ class DocumentProcessor(DocumentProcessorInterface):
     async def _get_ollama_summary(self, file_path: str) -> str:
         """Local fallback using Ollama for privacy-sensitive or offline tasks."""
         try:
-            # Using loop.run_in_executor because ollama-python is currently sync
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, 
-                lambda: ollama.chat(
-                    model=self.ollama_model,
-                    messages=[{
-                        'role': 'user',
-                        'content': 'Summarize this document in 4 professional bullet points.',
-                        'images': [file_path] 
-                    }]
-                )
+            # We use self.ollama_client instead of the global 'ollama' module
+            response = await self.ollama_client.chat(
+                model=self.ollama_model,
+                messages=[{
+                    'role': 'user',
+                    'content': 'Summarize this document in 4 professional bullet points.',
+                    'images': [file_path] 
+                }]
             )
             return response['message']['content']
         except Exception as e:
-            logger.error(f"Local VLM Error: {e}")
-            raise ProcessingError(f"AI Engine failed to respond: {str(e)}")
+            logger.error(f"Ollama Error at {settings.ollama_base_url}: {e}")
+            raise ProcessingError(f"AI Engine failed: {str(e)}")
 
     async def process(self, file_path: str, mime_type: str = None) -> dict:
         """Main entry point for document analysis."""

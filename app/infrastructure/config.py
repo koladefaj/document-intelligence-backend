@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     gemini_api: str | None = None
     ai_provider: str | None = None
     ollama_model: str | None = None
+    ollama_base_url: str | None = None
     secret_key: str | None = None
     access_token_expire_minutes: int | None = None
     refresh_token_expire_days: int | None = None
