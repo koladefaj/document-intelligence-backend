@@ -73,47 +73,17 @@ services:
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
-  
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    volumes:
-      - ollama_storage:/root/.ollama
-    ports:
-      - "11434:11434"
-    # Using 'moondream' (1.7GB) instead of Qwen 7B (4.5GB) for your 8GB RAM
-    entrypoint: >
-      /bin/sh -c "
-      ollama serve & 
-      sleep 15;
-      until ollama pull moondream; do
-      echo 'Download failed or timed out, retrying in 5 seconds...';
-      sleep 5;
-      done;
-      wait"
-    deploy:
-      resources:
-        limits:
-          memory: 2.5G # Caps Ollama so your laptop stays responsive
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   worker:
     build: .
     container_name: celery_worker
     command: celery -A app.infrastructure.queue.celery_app worker --loglevel=info -P solo
     env_file: .env
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-      # Note: Our config.py handles the localhost -> db swap
+    # We removed the OLLAMA_HOST here because it will now be read 
+    # from your .env file (pointing to Railway)
     depends_on:
       db:
         condition: service_healthy
-      ollama:
-        condition: service_started
       redis:
         condition: service_started
     volumes:
@@ -133,4 +103,3 @@ volumes:
   postgres_data:
   minio_data:
   uploaded_files:
-  ollama_storage:
