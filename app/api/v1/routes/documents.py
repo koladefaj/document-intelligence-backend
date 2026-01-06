@@ -67,3 +67,54 @@ async def upload_document(
         )
     
 
+@router.get("/{document_id}")
+async def get_document(
+    document_id: UUID, 
+    session: AsyncSession = Depends(get_session),
+    user = Depends(get_current_user)
+):
+    """
+    Retrieve a specific document's analysis and status.
+    """
+    # 1. Fetch document from DB
+    result = await session.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    doc = result.scalar_one_or_none()
+
+    # 2. Check if exists
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Document not found"
+        )
+
+    # 3. Security: Ensure the user requesting it owns it
+    if doc.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You do not have permission to view this document"
+        )
+
+    return {
+        "id": str(doc.id),
+        "file_name": doc.file_name,
+        "status": doc.status,
+        "raw_text_preview": doc.raw_text[:500] if doc.raw_text else None, # First 500 chars
+        "analysis": doc.analysis, # This is your JSON results from the AI
+        "created_at": doc.created_at
+    }
+
+@router.get("/")
+async def list_my_documents(
+    session: AsyncSession = Depends(get_session),
+    user = Depends(get_current_user)
+):
+    """
+    List all documents belonging to the logged-in user.
+    """
+    result = await session.execute(
+        select(Document).where(Document.owner_id == user.id)
+    )
+    documents = result.scalars().all()
+    return documents
