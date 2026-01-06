@@ -4,6 +4,7 @@ from app.infrastructure.processing.processor_service import DocumentProcessor
 from app.infrastructure.storage.minio_service import MinioStorage
 from app.infrastructure.storage.local_storage import LocalStorage
 from app.domain.services.storage_interface import StorageInterface
+from app.infrastructure.storage.r2_storage import R2Storage
 from app.infrastructure.queue import celery_app
 
 # Initialize logger for dependency tracking
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 # We initialize these once to avoid repeated connection overhead
 _local_storage = LocalStorage()
 _minio_storage = MinioStorage()
+_r2_storage = R2Storage()
 
 def get_storage_service() -> StorageInterface:
     """
@@ -31,8 +33,8 @@ def get_storage_service() -> StorageInterface:
         logger.debug("Storage Dependency: Injecting MinioStorage")
         return _minio_storage
     
-    logger.debug("Storage Dependency: Injecting LocalStorage")
-    return _local_storage
+    logger.debug("Storage Dependency: Injecting R2Storage")
+    return _r2_storage
 
 def get_task_queue():
     """Returns the initialized Celery application for task dispatching."""
