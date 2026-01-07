@@ -9,7 +9,6 @@ from pypdf import PdfReader
 from google import genai
 from docx import Document as DocxReader
 from pdf2image import convert_from_path
-from PIL import Image
 
 from app.infrastructure.config import settings
 from app.domain.exceptions import ProcessingError
