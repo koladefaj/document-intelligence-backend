@@ -9,6 +9,10 @@ A high-performance, asynchronous document analysis system built with **FastAPI**
 
 ### Demo
 **1️⃣ Register User**  
+<video width="600" controls>
+  <source src="assets/demo-upload.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 ![Register User](assets/demo-register.mp4)
 
 **2️⃣ Login User**  
