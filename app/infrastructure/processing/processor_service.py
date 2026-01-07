@@ -1,202 +1,218 @@
 import os
 import logging
+import asyncio
 import pandas as pd
 from ollama import Client
-import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_message
 from pypdf import PdfReader
 from google import genai
 from docx import Document as DocxReader
+
 from app.infrastructure.config import settings
 from app.domain.exceptions import ProcessingError
 from app.domain.services.document_processor import DocumentProcessorInterface
 
 logger = logging.getLogger(__name__)
 
+
 class DocumentProcessor(DocumentProcessorInterface):
     def __init__(self):
         self.provider = settings.ai_provider.lower()
         self.api_key = settings.gemini_api.strip('"')
-        
+
         # Gemini client (async)
         self.gemini_client = genai.Client(api_key=self.api_key)
+
+        # Ollama
         self.ollama_model = settings.ollama_model
-        
-        # FIXED: Use synchronous Client for Celery compatibility
         self.ollama_client = Client(host=settings.ollama_base_url)
 
-    def _extract_text_metadata(self, file_path: str) -> str:
-        """Fallback text extraction for metadata and word counts."""
-        ext = os.path.splitext(file_path)[1].lower()
+    # ------------------------------------------------------------------
+    # TEXT EXTRACTION (EXTENSION + MIME SAFE)
+    # ------------------------------------------------------------------
+    def _extract_text_metadata(self, file_path: str, mime_type: str | None = None) -> str:
         text = ""
+
         try:
-            if ext == ".pdf":
+            ext = os.path.splitext(file_path)[1].lower()
+
+            is_pdf = ext == ".pdf" or mime_type == "application/pdf"
+            is_docx = ext in [".docx", ".doc"]
+            is_excel = ext in [".xls", ".xlsx"]
+            is_csv = ext == ".csv"
+
+            if is_pdf:
                 reader = PdfReader(file_path)
-                # Extract text from all pages
-                for page_num, page in enumerate(reader.pages):
+                for i, page in enumerate(reader.pages):
                     page_text = page.extract_text() or ""
                     text += page_text
-                    logger.debug(f"PDF page {page_num + 1}: extracted {len(page_text)} chars")
-            
-                # Log total extraction
-                logger.info(f"PDF extraction complete: {len(text)} total characters from {len(reader.pages)} pages")
-            
-                # If no text extracted, it might be a scanned PDF
+                    logger.debug(f"PDF page {i + 1}: {len(page_text)} chars")
+
+                logger.info(f"PDF extraction complete: {len(text)} characters")
+
                 if not text.strip():
-                    logger.warning(f"PDF appears to be scanned (no extractable text). File: {file_path}")
-                    # Return a placeholder so processing can continue
-                    return "[This appears to be a scanned PDF with no extractable text. OCR processing would be needed.]"
-                
-            elif ext in [".docx", ".doc"]:
+                    logger.warning("PDF appears to be scanned (no extractable text)")
+                    return "[SCANNED_PDF]"
+
+            elif is_docx:
                 doc = DocxReader(file_path)
-                text = "\n".join([p.text for p in doc.paragraphs])
+                text = "\n".join(p.text for p in doc.paragraphs)
                 logger.info(f"DOCX extraction: {len(text)} characters")
-            
-            elif ext in [".xlsx", ".xls", ".csv"]:
-                df = pd.read_excel(file_path) if ext != ".csv" else pd.read_csv(file_path)
+
+            elif is_excel:
+                df = pd.read_excel(file_path)
                 text = df.to_string()
-                logger.info(f"Spreadsheet extraction: {len(text)} characters")
-            
+                logger.info(f"Excel extraction: {len(text)} characters")
+
+            elif is_csv:
+                df = pd.read_csv(file_path)
+                text = df.to_string()
+                logger.info(f"CSV extraction: {len(text)} characters")
+
             elif ext == ".txt":
                 with open(file_path, "r", encoding="utf-8") as f:
                     text = f.read()
                 logger.info(f"TXT extraction: {len(text)} characters")
-            
+
+            else:
+                logger.warning(f"Unsupported or unknown file type: {file_path}")
+
         except Exception as e:
-            logger.error(f"Text extraction failed for {file_path}: {e}", exc_info=True)
-        
+            logger.error("Text extraction failed", exc_info=True)
+            raise ProcessingError(f"Text extraction error: {e}")
+
         return text
 
+    # ------------------------------------------------------------------
+    # GEMINI (ASYNC)
+    # ------------------------------------------------------------------
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2, min=10, max=60),
         retry=retry_if_exception_message(match=".*Rate Limit.*|.*429.*")
     )
     async def _get_gemini_summary(self, file_path: str, mime_type: str) -> str:
-        """Sends the file to Gemini 2.0 Flash."""
         try:
             uploaded_file = self.gemini_client.files.upload(
-                file=file_path, 
-                config={'mime_type': mime_type}
+                file=file_path,
+                config={"mime_type": mime_type}
             )
 
             await asyncio.sleep(2)
-            
+
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.0-flash',
+                model="gemini-2.0-flash",
                 contents=[
-                    "Analyze this document and provide a professional 4-bullet point summary.",
+                    "Analyze this document and provide EXACTLY 4 professional bullet points.",
                     uploaded_file
                 ]
             )
+
             return response.text.strip()
-            
+
         except Exception as e:
             if "429" in str(e):
-                logger.warning("Gemini Rate Limit (429) hit. Tenacity is retrying...")
-                raise Exception("Gemini Rate Limit reached.")
-            raise Exception(f"Gemini Cloud Error: {str(e)}")
+                logger.warning("Gemini rate limit hit")
+                raise Exception("Gemini Rate Limit")
+            raise Exception(f"Gemini error: {e}")
 
-    def _get_ollama_summary_sync(self, file_path: str) -> str:
-        """
-        Synchronous Ollama processing for Celery.
-        """
+    # ------------------------------------------------------------------
+    # OLLAMA (SYNC – CELERY SAFE)
+    # ------------------------------------------------------------------
+    def _get_ollama_summary_sync(self, file_path: str, mime_type: str | None = None) -> str:
         try:
-            # Step 1: Extract text from document
-            extracted_text = self._extract_text_metadata(file_path)
-            
-            # Check if it's a scanned PDF
-            if "[This appears to be a scanned PDF" in extracted_text:
-                logger.warning("Scanned PDF detected - cannot process without OCR")
-                raise ProcessingError("This PDF appears to be scanned. OCR processing is required for image-based PDFs.")
-            
-            # Check if text is too short
+            extracted_text = self._extract_text_metadata(file_path, mime_type)
+
+            if extracted_text == "[SCANNED_PDF]":
+                raise ProcessingError("NON_RETRYABLE: scanned PDF requires OCR")
+
             if not extracted_text or len(extracted_text.strip()) < 50:
-                logger.error(f"Extracted text too short: {len(extracted_text)} chars")
-                raise ProcessingError(f"Document text extraction failed or document is too short (only {len(extracted_text)} characters extracted)")
-            
-            # Step 2: Truncate if too long
-            max_chars = 8000
-            if len(extracted_text) > max_chars:
-                logger.warning(f"Document text truncated from {len(extracted_text)} to {max_chars} chars")
-                extracted_text = extracted_text[:max_chars] + "...(truncated)"
-            
-            # Step 3: Send to Ollama
-            logger.info(f"Sending {len(extracted_text)} chars to Ollama model: {self.ollama_model}")
-            
+                raise ProcessingError(
+                    f"NON_RETRYABLE: document too short ({len(extracted_text)} chars)"
+                )
+
+            if len(extracted_text) > 8000:
+                extracted_text = extracted_text[:8000] + "...(truncated)"
+
+            logger.info(f"Sending {len(extracted_text)} chars to Ollama")
+
             response = self.ollama_client.chat(
                 model=self.ollama_model,
                 messages=[{
-                    'role': 'user',
-                    'content': f"""Analyze this document and provide a professional 4-bullet point summary.
+                    "role": "user",
+                    "content": f"""
+Analyze the following document and provide EXACTLY 4 concise bullet points.
 
-    Document content:
-    {extracted_text}
+{extracted_text}
 
-    Provide ONLY the 4 bullet points, nothing else."""
+ONLY the bullet points. No introduction. No conclusion.
+"""
                 }]
             )
-            
-            summary = response['message']['content']
-            logger.info(f"Ollama summary generated: {len(summary)} chars")
-            return summary
-            
-        except Exception as e:
-            logger.error(f"Ollama Error at {settings.ollama_base_url}: {e}", exc_info=True)
-            raise ProcessingError(f"AI Engine failed: {str(e)}")
 
-    async def process(self, file_path: str, mime_type: str = None) -> dict:
-        """Main entry point for document analysis - ASYNC version for FastAPI."""
+            return response["message"]["content"].strip()
+
+        except ProcessingError:
+            raise
+
+        except Exception as e:
+            logger.error("Ollama processing failed", exc_info=True)
+            raise ProcessingError(f"AI Engine failed: {e}")
+
+    # ------------------------------------------------------------------
+    # FASTAPI (ASYNC)
+    # ------------------------------------------------------------------
+    async def process(self, file_path: str, mime_type: str | None = None) -> dict:
         logger.info(f"Processing document with {self.provider}: {file_path}")
 
         if self.provider == "ollama":
-            # Run sync Ollama in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            summary = await loop.run_in_executor(None, self._get_ollama_summary_sync, file_path)
+            loop = asyncio.get_running_loop()
+            summary = await loop.run_in_executor(
+                None, self._get_ollama_summary_sync, file_path, mime_type
+            )
         else:
             summary = await self._get_gemini_summary(file_path, mime_type)
 
-        raw_text = self._extract_text_metadata(file_path)
-
-        analysis = {
-            "summary": summary,
-            "word_count": len(raw_text.split()),
-            "contains_email": "@" in raw_text,
-            "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
-            "ai_provider": self.provider
-        }
+        raw_text = self._extract_text_metadata(file_path, mime_type)
 
         return {
             "raw_text": raw_text,
-            "analysis": analysis
+            "analysis": {
+                "summary": summary,
+                "word_count": len(raw_text.split()),
+                "contains_email": "@" in raw_text,
+                "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
+                "ai_provider": self.provider
+            }
         }
-    
-    def process_sync(self, file_path: str, mime_type: str = None) -> dict:
-        """SYNCHRONOUS version for Celery worker."""
+
+    # ------------------------------------------------------------------
+    # CELERY (SYNC)
+    # ------------------------------------------------------------------
+    def process_sync(self, file_path: str, mime_type: str | None = None) -> dict:
         logger.info(f"Processing document with {self.provider}: {file_path}")
 
         if self.provider == "ollama":
-            summary = self._get_ollama_summary_sync(file_path)
+            summary = self._get_ollama_summary_sync(file_path, mime_type)
         else:
-            # For Gemini in Celery, we need to run async code in sync context
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                summary = loop.run_until_complete(self._get_gemini_summary(file_path, mime_type))
+                summary = loop.run_until_complete(
+                    self._get_gemini_summary(file_path, mime_type)
+                )
             finally:
                 loop.close()
 
-        raw_text = self._extract_text_metadata(file_path)
-
-        analysis = {
-            "summary": summary,
-            "word_count": len(raw_text.split()),
-            "contains_email": "@" in raw_text,
-            "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
-            "ai_provider": self.provider
-        }
+        raw_text = self._extract_text_metadata(file_path, mime_type)
 
         return {
             "raw_text": raw_text,
-            "analysis": analysis
+            "analysis": {
+                "summary": summary,
+                "word_count": len(raw_text.split()),
+                "contains_email": "@" in raw_text,
+                "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
+                "ai_provider": self.provider
+            }
         }
