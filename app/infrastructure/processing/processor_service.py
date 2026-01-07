@@ -37,9 +37,24 @@ class DocumentProcessor(DocumentProcessorInterface):
             ext = os.path.splitext(file_path)[1].lower()
 
             is_pdf = ext == ".pdf" or mime_type == "application/pdf"
-            is_docx = ext in [".docx", ".doc"]
-            is_excel = ext in [".xls", ".xlsx"]
-            is_csv = ext == ".csv"
+
+            is_docx = (
+                ext in [".docx", ".doc"]
+                or mime_type
+                in ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]
+            )
+
+            is_excel = (
+                ext in [".xls", ".xlsx"]
+                or mime_type
+                in [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-excel",
+                ]
+            )
+
+            is_csv = ext == ".csv" or mime_type == "text/csv"
+            is_txt = ext == ".txt" or mime_type == "text/plain"
 
             if is_pdf:
                 reader = PdfReader(file_path)
@@ -60,22 +75,24 @@ class DocumentProcessor(DocumentProcessorInterface):
                 logger.info(f"DOCX extraction: {len(text)} characters")
 
             elif is_excel:
-                df = pd.read_excel(file_path)
-                text = df.to_string()
+                df = pd.read_excel(file_path, nrows=500)
+                text = df.to_string(index=False)
                 logger.info(f"Excel extraction: {len(text)} characters")
 
             elif is_csv:
-                df = pd.read_csv(file_path)
-                text = df.to_string()
+                df = pd.read_csv(file_path, nrows=500)
+                text = df.to_string(index=False)
                 logger.info(f"CSV extraction: {len(text)} characters")
 
-            elif ext == ".txt":
+            elif is_txt:
                 with open(file_path, "r", encoding="utf-8") as f:
                     text = f.read()
                 logger.info(f"TXT extraction: {len(text)} characters")
 
             else:
-                logger.warning(f"Unsupported or unknown file type: {file_path}")
+                logger.warning(
+                    f"Unsupported file type: {mime_type or ext}"
+                )
 
         except Exception as e:
             logger.error("Text extraction failed", exc_info=True)
@@ -89,13 +106,13 @@ class DocumentProcessor(DocumentProcessorInterface):
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2, min=10, max=60),
-        retry=retry_if_exception_message(match=".*Rate Limit.*|.*429.*")
+        retry=retry_if_exception_message(match=".*Rate Limit.*|.*429.*"),
     )
     async def _get_gemini_summary(self, file_path: str, mime_type: str) -> str:
         try:
             uploaded_file = self.gemini_client.files.upload(
                 file=file_path,
-                config={"mime_type": mime_type}
+                config={"mime_type": mime_type},
             )
 
             await asyncio.sleep(2)
@@ -103,9 +120,16 @@ class DocumentProcessor(DocumentProcessorInterface):
             response = self.gemini_client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=[
-                    "Analyze this document and provide EXACTLY 4 professional bullet points.",
-                    uploaded_file
-                ]
+                    "Analyze the document below and extract its most important insights.\n"
+                    "Rules:\n"
+                    "- Provide EXACTLY 4 bullet points\n"
+                    "- Each bullet should capture a key insight, result, or recommendation\n"
+                    "- Be concise and professional\n"
+                    "- No intro, no conclusion, no extra text\n"
+                    "- Output ONLY bullet points\n\n"
+                    "Document:",
+                    uploaded_file,
+                ],
             )
 
             return response.text.strip()
@@ -138,16 +162,21 @@ class DocumentProcessor(DocumentProcessorInterface):
 
             response = self.ollama_client.chat(
                 model=self.ollama_model,
+                options={"temperature": 0.2},
                 messages=[{
                     "role": "user",
-                    "content": f"""
-Analyze the following document and provide EXACTLY 4 concise bullet points.
+                    "content": f"""Analyze the document below and extract its most important insights.
 
+RULES (STRICT):
+- EXACTLY 4 bullet points
+- One sentence per bullet
+- No intro, no conclusion, no headings
+- Output ONLY bullet points
+
+DOCUMENT:
 {extracted_text}
-
-ONLY the bullet points. No introduction. No conclusion.
 """
-                }]
+                }],
             )
 
             return response["message"]["content"].strip()
@@ -182,8 +211,8 @@ ONLY the bullet points. No introduction. No conclusion.
                 "word_count": len(raw_text.split()),
                 "contains_email": "@" in raw_text,
                 "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
-                "ai_provider": self.provider
-            }
+                "ai_provider": self.provider,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -213,6 +242,6 @@ ONLY the bullet points. No introduction. No conclusion.
                 "word_count": len(raw_text.split()),
                 "contains_email": "@" in raw_text,
                 "contains_money": any(s in raw_text for s in ["$", "USD", "NGN", "€"]),
-                "ai_provider": self.provider
-            }
+                "ai_provider": self.provider,
+            },
         }
