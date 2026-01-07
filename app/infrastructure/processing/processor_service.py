@@ -32,18 +32,39 @@ class DocumentProcessor(DocumentProcessorInterface):
         try:
             if ext == ".pdf":
                 reader = PdfReader(file_path)
-                text = "\n".join([p.extract_text() or "" for p in reader.pages])
+                # Extract text from all pages
+                for page_num, page in enumerate(reader.pages):
+                    page_text = page.extract_text() or ""
+                    text += page_text
+                    logger.debug(f"PDF page {page_num + 1}: extracted {len(page_text)} chars")
+            
+                # Log total extraction
+                logger.info(f"PDF extraction complete: {len(text)} total characters from {len(reader.pages)} pages")
+            
+                # If no text extracted, it might be a scanned PDF
+                if not text.strip():
+                    logger.warning(f"PDF appears to be scanned (no extractable text). File: {file_path}")
+                    # Return a placeholder so processing can continue
+                    return "[This appears to be a scanned PDF with no extractable text. OCR processing would be needed.]"
+                
             elif ext in [".docx", ".doc"]:
                 doc = DocxReader(file_path)
                 text = "\n".join([p.text for p in doc.paragraphs])
+                logger.info(f"DOCX extraction: {len(text)} characters")
+            
             elif ext in [".xlsx", ".xls", ".csv"]:
                 df = pd.read_excel(file_path) if ext != ".csv" else pd.read_csv(file_path)
                 text = df.to_string()
+                logger.info(f"Spreadsheet extraction: {len(text)} characters")
+            
             elif ext == ".txt":
                 with open(file_path, "r", encoding="utf-8") as f:
                     text = f.read()
+                logger.info(f"TXT extraction: {len(text)} characters")
+            
         except Exception as e:
-            logger.error(f"Text extraction failed for {file_path}: {e}")
+            logger.error(f"Text extraction failed for {file_path}: {e}", exc_info=True)
+        
         return text
 
     @retry(
@@ -79,22 +100,28 @@ class DocumentProcessor(DocumentProcessorInterface):
     def _get_ollama_summary_sync(self, file_path: str) -> str:
         """
         Synchronous Ollama processing for Celery.
-        Extracts text first, then sends to Ollama.
         """
         try:
             # Step 1: Extract text from document
             extracted_text = self._extract_text_metadata(file_path)
             
-            if not extracted_text or len(extracted_text.strip()) < 50:
-                raise ProcessingError("Document text extraction failed or document is too short")
+            # Check if it's a scanned PDF
+            if "[This appears to be a scanned PDF" in extracted_text:
+                logger.warning("Scanned PDF detected - cannot process without OCR")
+                raise ProcessingError("This PDF appears to be scanned. OCR processing is required for image-based PDFs.")
             
-            # Step 2: Truncate if too long (Ollama context limits)
-            max_chars = 8000  # Adjust based on your model's context window
+            # Check if text is too short
+            if not extracted_text or len(extracted_text.strip()) < 50:
+                logger.error(f"Extracted text too short: {len(extracted_text)} chars")
+                raise ProcessingError(f"Document text extraction failed or document is too short (only {len(extracted_text)} characters extracted)")
+            
+            # Step 2: Truncate if too long
+            max_chars = 8000
             if len(extracted_text) > max_chars:
                 logger.warning(f"Document text truncated from {len(extracted_text)} to {max_chars} chars")
                 extracted_text = extracted_text[:max_chars] + "...(truncated)"
             
-            # Step 3: Send to Ollama for summarization
+            # Step 3: Send to Ollama
             logger.info(f"Sending {len(extracted_text)} chars to Ollama model: {self.ollama_model}")
             
             response = self.ollama_client.chat(
@@ -103,10 +130,10 @@ class DocumentProcessor(DocumentProcessorInterface):
                     'role': 'user',
                     'content': f"""Analyze this document and provide a professional 4-bullet point summary.
 
-Document content:
-{extracted_text}
+    Document content:
+    {extracted_text}
 
-Provide ONLY the 4 bullet points, nothing else."""
+    Provide ONLY the 4 bullet points, nothing else."""
                 }]
             )
             
@@ -115,7 +142,7 @@ Provide ONLY the 4 bullet points, nothing else."""
             return summary
             
         except Exception as e:
-            logger.error(f"Ollama Error at {settings.ollama_base_url}: {e}")
+            logger.error(f"Ollama Error at {settings.ollama_base_url}: {e}", exc_info=True)
             raise ProcessingError(f"AI Engine failed: {str(e)}")
 
     async def process(self, file_path: str, mime_type: str = None) -> dict:
