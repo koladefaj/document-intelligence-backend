@@ -43,6 +43,13 @@ A high-performance, asynchronous document analysis system built with **FastAPI**
 - **Scalable Infrastructure**: Designed for deployment on Railway with separate services for the API, Worker, and Database.
 
 ---
+## 🔹 Tech Highlights
+
+* **Pydantic**: Ensures type-safe request validation and response serialization.
+* **Dependency Injection**: Promotes modular, testable, and maintainable code, especially for DB sessions, authentication, and services.
+* **Security**: JWT Auth, magic-byte file validation, rate limiting, and CORS protection.
+
+---
 
 ## 🏗️ Architecture
 
@@ -152,6 +159,16 @@ OLLAMA_MODEL="qwen2.5:1.5b"
     celery -A app.worker worker --loglevel=info
     ```
 ---
+## 🧪 Testing & CI/CD
+
+* **Automated Tests**: Project uses pytest for unit and integration tests.
+Run tests locally with:
+```bash
+pytest
+```
+* **Continuous Integration**: GitHub Actions is configured to run tests automatically on every push and pull request. This ensures that your API and background tasks work correctly before deployment.
+
+---
 
 ## API Reference
 |Method|Endpoint|Description|
@@ -163,6 +180,7 @@ OLLAMA_MODEL="qwen2.5:1.5b"
 |POST|/documents/upload|Upload PDF/DOCX/TXT/XLSX for AI analysis|
 |GET|/documents/{document_id}|Get status and AI summary result|
 ---
+
 
 ## Security
 * **File Validation**: All uploads are scanned for magic bytes to prevent malicious file execution.
