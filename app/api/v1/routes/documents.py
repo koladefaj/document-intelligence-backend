@@ -12,6 +12,7 @@ from app.domain.services.storage_interface import StorageInterface
 from app.dependencies import get_storage_service
 from app.core.security import validate_file_content
 from app.core.limiter import limiter
+from app.infrastructure.db.models import Document
 
 # Initialize logger
 logger = logging.getLogger(__name__)
