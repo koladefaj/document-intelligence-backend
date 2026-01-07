@@ -1,6 +1,35 @@
 # AI Document Intelligence Platform
 
+[Live Demo: AI Document Intelligence API](https://document-intelligence-backend-production.up.railway.app/docs)
+
+
 A high-performance, asynchronous document analysis system built with **FastAPI**, **Celery**, and **Ollama**. This platform allows users to upload **PDF (including scanned), DOCX, TXT, and XLSX** files, performs OCR when needed, and generates **AI-driven summaries** using local LLMs.
+
+---
+
+### Demo
+**1️⃣ Register User**  
+![Register User](assets/demo-register.mp4)
+
+**2️⃣ Login User**  
+![Login User](assets/demo-login.mp4)
+
+**3️⃣ Upload Document**  
+![Upload Document](assets/demo-upload.mp4)
+
+**4️⃣ Task Status**  
+![Task Status](assets/demo-task-status.mp4)
+
+**5️⃣AI Summary**  
+![AI Summary](assets/demo-summary.mp4)
+
+**6️⃣ Edit Password**  
+![Edit Password](assets/demo-edit-password.mp4)
+
+**7️⃣ Delete Account**  
+![Delete Account](assets/demo-delete.mp4)
+
+
 
 ---
 
@@ -23,6 +52,12 @@ A high-performance, asynchronous document analysis system built with **FastAPI**
 - **Redis**: Message broker between the API and the Worker.
 - **Celery Worker**: Performs OCR and communicates with the Ollama API.
 - **Ollama**: Hosts the LLM (e.g., Qwen2.5:1.5b) on a dedicated internal service.
+
+---
+
+### 🚀 Deployment Overview
+![Railway Microservices Setup](assets/railway-screenshot.png)
+*Microservice architecture deployed on Railway showing API, Worker, Database, Redis, and AI services.*
 
 ---
 
@@ -86,6 +121,9 @@ CELERY_RESULT_BACKEND=redis://redis:6379/0
 # AI Provider
 AI_PROVIDER="ollama"
 OLLAMA_MODEL="qwen2.5:1.5b"
+```
+
+---
 
 ### Installation Steps
 1.  **Clone the Repository:**
@@ -113,16 +151,18 @@ OLLAMA_MODEL="qwen2.5:1.5b"
     ```bash
     celery -A app.worker worker --loglevel=info
     ```
+---
 
 ## API Reference
 |Method|Endpoint|Description|
 |------|--------|-----------|
 |POST|/auth/register|Register a new user|
 |POST|/auth/login|Login and get JWT tokens|
-|PATCH|/users/me/password|Update account password|
-|DELETE|/users/{id}|Delete user account|
+|PATCH|/auth/change-password|Update account password|
+|DELETE|/auth/delete-account|Delete user account|
 |POST|/documents/upload|Upload PDF/DOCX/TXT/XLSX for AI analysis|
-|GET|/documents/{id}|Get status and AI summary result|
+|GET|/documents/{document_id}|Get status and AI summary result|
+---
 
 ## Security
 * **File Validation**: All uploads are scanned for magic bytes to prevent malicious file execution.
@@ -130,6 +170,7 @@ OLLAMA_MODEL="qwen2.5:1.5b"
 * **JWT Auth**: All document routes are protected and scoped to the document owner.
 * **Rate Limiting**: Login and registration routes are limited to prevent brute-force attacks.
 * **CORS Enabled**: Web clients can securely access the API.
+---
 
 ## Supported Formats
 
@@ -137,6 +178,7 @@ OLLAMA_MODEL="qwen2.5:1.5b"
 * **DOCX**
 * **TXT**
 * **XLSX**
+---
 
 ## 📚 Notes
 
