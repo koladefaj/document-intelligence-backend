@@ -2,11 +2,14 @@ import os
 import logging
 import asyncio
 import pandas as pd
+import pytesseract
 from ollama import Client
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_message
 from pypdf import PdfReader
 from google import genai
 from docx import Document as DocxReader
+from pdf2image import convert_from_path
+from PIL import Image
 
 from app.infrastructure.config import settings
 from app.domain.exceptions import ProcessingError
@@ -27,9 +30,7 @@ class DocumentProcessor(DocumentProcessorInterface):
         self.ollama_model = settings.ollama_model
         self.ollama_client = Client(host=settings.ollama_base_url)
 
-    # ------------------------------------------------------------------
     # TEXT EXTRACTION (EXTENSION + MIME SAFE)
-    # ------------------------------------------------------------------
     def _extract_text_metadata(self, file_path: str, mime_type: str | None = None) -> str:
         text = ""
 
@@ -66,8 +67,30 @@ class DocumentProcessor(DocumentProcessorInterface):
                 logger.info(f"PDF extraction complete: {len(text)} characters")
 
                 if not text.strip():
-                    logger.warning("PDF appears to be scanned (no extractable text)")
-                    return "[SCANNED_PDF]"
+                    logger.warning("PDF appears to be scanned. Using OCR...")
+                    try:
+                        # Convert PDF pages to images
+                        pages = convert_from_path(file_path)
+                        ocr_text = ""
+
+                        # Limit OCR to first 20 pages to avoid huge PDFs slowing things down
+                        for i, page_image in enumerate(pages[:20]):
+                            ocr_page_text = pytesseract.image_to_string(page_image)
+                            ocr_text += ocr_page_text
+                            logger.debug(f"OCR page {i + 1}: {len(ocr_page_text)} chars")
+
+                        # Check if OCR succeeded
+                        if not ocr_text.strip():
+                            logger.error("OCR failed to extract any text from the scanned PDF.")
+                            text = "[This appears to be a scanned PDF with no extractable text. OCR failed.]"
+                        else:
+                            text = ocr_text
+                            logger.info(f"OCR extraction complete: {len(text)} characters")
+
+                    except Exception as e:
+                        logger.error(f"OCR processing failed: {e}", exc_info=True)
+                        text = "[This appears to be a scanned PDF. OCR could not process it.]"
+
 
             elif is_docx:
                 doc = DocxReader(file_path)

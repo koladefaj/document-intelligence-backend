@@ -79,9 +79,11 @@ async def delete_user(session: AsyncSession, user_id: str) -> None:
         raise AuthenticationFailed("User not found.")
     
     # Soft delete
+    dummy_password = hash_password("deleted_user_dummy_password")
+
     user.is_active = False
     user.email = f"deleted_{user.id}@example.com"  # anonymize
-    user.hashed_password = None
+    user.hashed_password = dummy_password
     
     await session.commit()
     logger.info(f"User account {user_id} deactivated")
